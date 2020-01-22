@@ -135,5 +135,12 @@ class Sqlite(Database):
     _session = sessionmaker(bind=_engine)
 
 #TODO mark object dirty when fields change
+
 #TODO sync changes when save called, or object goes out of scope
-#TODO or just keep updating when the fields are changed
+#     or just keep updating when the fields are changed
+
+#TODO instead of keeping track of the fields as they change,
+#     keep track of the state of the object when it first comes into being,
+#     and then use that to see if an update is required when object is saved.
+#     this should make a lot of the logic for setting up accessors and whatnot
+#     quite a bit more simple

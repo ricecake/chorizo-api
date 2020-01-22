@@ -4,7 +4,7 @@ from twisted.internet import defer
 
 import treq
 
-json_api = JsonApi(app=Klein(), secret="cat")
+json_api = JsonApi()
 
 @json_api.route('/', validation={ "test": { "type": "string" }}, restricted=True)
 @defer.inlineCallbacks
