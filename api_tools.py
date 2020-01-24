@@ -5,11 +5,14 @@ import json
 import cerberus
 import treq
 import time
-
+import jwt
+import re
+from string import Template
 
 class PkiCache(object):
     def __init__(self, ttl=3600):
         self.data = None
+        self.map = {}
         self.ttl = ttl
         self.last_update = 0
         self.refreshing_deffered = None
@@ -21,6 +24,7 @@ class PkiCache(object):
         @defer.inlineCallbacks
         def finish(res, *args):
             self.data = yield treq.json_content(res)
+            self.map.update({ x["kid"]: jwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(x)) for x in self.data["keys"] if x["kid"] })
             self.last_update = time.time()
             self.refreshing_deffered = None
 
@@ -42,6 +46,9 @@ class PkiCache(object):
             self.refresh()
 
         defer.returnValue(result)
+
+    def key(self, keyName=None):
+        return self.map.get(keyName)
 
 
 class JsonApi(object):
@@ -78,35 +85,68 @@ class JsonApi(object):
 
         return deco
 
-    def authenticate(self, f, authData=False):
+    def authenticate(self, f):
         """
         Middleware api-key authentication
         """
         @wraps(f)
         def deco(*args, **kwargs):
             request = args[0]
-            apiKey = request.getHeader('Authorization')
-            if apiKey:
-                keyDef = self.pki_cache.get()
+            apiKey = None
+            result = re.search(r'^Bearer (\S+)$', request.getHeader('Authorization'), re.IGNORECASE)
+            if result:
+                apiKey = result.group(1)
 
-                def authedCall(keys):
-                    if not apiKey or apiKey != self.secret:
-                        request.setResponseCode(401)
-                        return {
-                            'scope': 'private',
-                            'message': 'Sorry, valid credentials required to access content'
-                        }
-                    return defer.maybeDeferred(f, *args, **kwargs)
-
-                keyDef.addCallback(authedCall)
-                return keyDef
-            else:
+            def auth_failure(cause):
                 request.setResponseCode(401)
                 return {
                     'scope': 'private',
-                    'message': 'Sorry, valid credentials required to access content'
+                    'message': 'Sorry, valid credentials required to access content',
+                    "cause": str(cause),
                 }
 
+            if not apiKey:
+                return auth_failure("No auth")
+
+            keyDef = self.pki_cache.get()
+
+            def authedCall(keys):
+                try:
+                    kid = jwt.get_unverified_header(apiKey)['kid']
+                    pubkey = self.pki_cache.key(kid)
+                    kwargs["authed_user_data"] = jwt.decode(apiKey, pubkey, algorithm='RS256')
+                except jwt.exceptions.InvalidTokenError as ex:
+                    return auth_failure(ex)
+
+                return defer.maybeDeferred(f, *args, **kwargs)
+
+            keyDef.addCallback(authedCall)
+            return keyDef
+
+
+        return deco
+
+    def authorize(self, f, required=[]):
+        """
+        Middleware api-key authentication
+        """
+        @wraps(f)
+        def deco(*args, **kwargs):
+            request = args[0]
+            userData = kwargs["authed_user_data"]
+
+            required = set(required) # This is where we need to loop through and expand template params using Template
+            granted = set(userData.get("perm"))
+
+            if not required <= granted:
+                request.setResponseCode(401)
+                return {
+                    'scope': 'private',
+                    'message': 'Insufficient permissions to execute method',
+                    'lacking': list(required - granted),
+                }
+
+            return f(*args, **kwargs)
 
         return deco
 
@@ -137,13 +177,18 @@ class JsonApi(object):
         """
         def deco(f):
             restricted = kwargs.pop('restricted', False)
+            acl = kwargs.pop('access_levels', [])
             validated = kwargs.pop('validation', False)
+
+            # Note: these are run in reverse order that they are wrapped
+            if restricted and acl:
+                f = self.authorize(f, acl)
 
             if validated:
                 f = self.validate(f, validation=validated)
 
             if restricted:
-                f = self.authenticate(f, restricted)
+                f = self.authenticate(f)
 
             f = self.defaultMiddleware(f)
             self.app.route(url, *args, **kwargs)(f)
