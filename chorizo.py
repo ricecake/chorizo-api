@@ -1,4 +1,3 @@
-from klein import Klein
 from api_tools import JsonApi
 from twisted.internet import defer
 
@@ -6,17 +5,12 @@ import treq
 
 json_api = JsonApi()
 
-@json_api.route('/',
-    validation={ "test": { "type": "string" } },
-    restricted=True,
-    access_levels=[
-        "a"
-    ],
-)
-@defer.inlineCallbacks
-def home(request, **kwargs):
-    res = yield treq.get("https://login.devhost.dev/.well-known/openid-configuration")
-    con = yield treq.text_content(res)
-    defer.returnValue(con)
+
+with json_api.subroute('/util') as util_api:
+    @util_api.route('/ping',
+        restricted=True,
+    )
+    def ping(request, **kwargs):
+        return "pong"
 
 json_api.run("localhost", 8089)

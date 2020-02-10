@@ -8,6 +8,7 @@ import time
 import jwt
 import re
 from string import Template
+from contextlib import contextmanager
 
 class PkiCache(object):
     def __init__(self, ttl=3600):
@@ -57,10 +58,13 @@ class JsonApi(object):
     repeated code.
     """
 
-    def __init__(self, app=None):
+    def __init__(self, app=None, cors=None):
+        # TODO: Need to find a way to accept "Default" args for things like
+        # restricted, and access levels...
         self.app = app if app else Klein()
         self.pki_cache = PkiCache()
         self.pki_cache.refresh()
+        self.cors = cors
 
     def run(self, *args, **kwargs):
         return self.app.run(*args, **kwargs)
@@ -79,6 +83,13 @@ class JsonApi(object):
         @wraps(f)
         def deco(*args, **kwargs):
             request = args[0]
+            # if request.method is 'OPTIONS' and self.cors:
+            #     status = 401
+            #     request.getHeader()
+            #     request.setHeader
+            #     request.setResponseCode(status)
+            #     return None
+
             request.setHeader('Content-Type', 'application/json')
             result = defer.maybeDeferred(f, *args, **kwargs)
             return result.addCallback(lambda res: self.toJSON(res))
@@ -93,9 +104,11 @@ class JsonApi(object):
         def deco(*args, **kwargs):
             request = args[0]
             apiKey = None
-            result = re.search(r'^Bearer (\S+)$', request.getHeader('Authorization'), re.IGNORECASE)
-            if result:
-                apiKey = result.group(1)
+            header = request.getHeader('Authorization')
+            if header:
+                result = re.search(r'^Bearer (\S+)$', header, re.IGNORECASE)
+                if result:
+                    apiKey = result.group(1)
 
             def auth_failure(cause):
                 request.setResponseCode(401)
@@ -136,6 +149,8 @@ class JsonApi(object):
             userData = kwargs["authed_user_data"]
 
             required = set(required) # This is where we need to loop through and expand template params using Template
+            # for i in required:
+            #    i = i.templplate($request.args)
             granted = set(userData.get("perm"))
 
             if not required <= granted:
@@ -193,6 +208,17 @@ class JsonApi(object):
             f = self.defaultMiddleware(f)
             self.app.route(url, *args, **kwargs)(f)
         return deco
+
+    @contextmanager
+    def subroute(self, prefix='/', options=None):
+        preApp = self.app
+        with self.app.subroute(prefix) as subApp:
+            try:
+                self.app = subApp
+                yield self
+            finally:
+                self.app = preApp
+
 
     def autoCrud(self, namespace, *args, **kwargs):
         """
