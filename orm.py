@@ -133,10 +133,14 @@ class Crud(Base):
 
 
     def _pre_update(self, **kwargs):
-        if not self._validator.validate(kwargs):
+        result_value = self.__field_values.copy()
+        result_value.update(kwargs)
+        if not self._validator.validate(result_value):
             raise Exception(self._validator.errors)
 
     def _do_update_action(self, **kwargs):
+        for field, value in kwargs.items():
+            setattr(self, field, value)
         self.sync()
 
     def _post_update(self, **kwargs):
