@@ -1,12 +1,10 @@
 import orm
 
-class SubclassA(orm.Crud):
-    __table__ = "foo"
+class Identity(orm.Postgres):
+    _table = "identity"
     _schema = {
-        "a": { "type": "integer", "primary_key": True },
-        "b": { "type": "integer", },
-        "c": { "type": "integer", },
-        "d": { "type": "integer", "default": 99 },
+        "identity": { "type": "string", "primary_key": True },
+        "settings": { "type": "dict",   "default": {} },
     }
 
-SubclassA._class_initialize()
+Identity._class_initialize()

@@ -1,4 +1,5 @@
 import cerberus
+from twisted.internet import defer
 
 class Base(object):
     def __init__(self, *args, **kwargs):
@@ -39,6 +40,7 @@ schema_validator = cerberus.Validator({
                         'datetime',
                         'date',
                         'boolean',
+                        'dict',
                     ],
                 },
                 "primary_key": {
@@ -65,8 +67,19 @@ class Crud(Base):
         cls._validator = cerberus.Validator(validator)
 
     @classmethod
+    def derivedClass(cls, **kwargs):
+        return cls
+
+    @classmethod
     def instantiate(cls, **kwargs):
-        return cls(**kwargs)
+        # TODO: subclass projection logic goes here
+        seen_classes = set()
+        newCls = cls
+        while newCls not in seen_classes:
+            seen_classes.add(newCls)
+            newCls = newCls.derivedClass(**kwargs)
+
+        return newCls(**kwargs)
 
 #### Create
     @classmethod
@@ -156,6 +169,84 @@ class Crud(Base):
     def sync(self):
         for field in self._schema.keys():
             self.__field_values[field] = getattr(self, field, None)
+
+    def asDict(self):
+        as_dict = {}
+        for field in self._schema.keys():
+            as_dict[field] = getattr(self, field, None)
+        return as_dict
+
+
+class Cursor(object):
+    def __init__(self):
+        pass
+    def all(self):
+        pass
+    def first(self):
+        pass
+    def last(self):
+        pass
+    def next(self):
+        pass
+    def each(self):
+        pass
+    def count(self):
+        pass
+
+
+from txpostgres import txpostgres
+import psycopg2, psycopg2.extensions, psycopg2.extras
+import pypika
+
+import config
+
+psycopg2.extensions.register_adapter(dict, psycopg2.extras.Json)
+
+def dict_connect(*args, **kwargs):
+    kwargs['connection_factory'] = psycopg2.extras.RealDictConnection
+    return psycopg2.connect(*args, **kwargs)
+
+
+class DictConnection(txpostgres.Connection):
+    connectionFactory = staticmethod(dict_connect)
+
+class DictConnectionPool(txpostgres.ConnectionPool):
+    connectionFactory = DictConnection
+
+conn_pool = DictConnectionPool(
+    None,
+    min=1,
+    user=config.file["db"]["username"].get(),
+    password=config.file["db"]["password"].get(),
+    host=config.file["db"]["host"].get(),
+    database=config.file["db"]["database"].get(),
+)
+
+conn_pool.start()
+
+
+class Postgres(Crud):
+    _table = None
+
+    @classmethod
+    @defer.inlineCallbacks
+    #TODO This should actually be instantiate
+    def create(cls, **kwargs):
+        self = super(Postgres, cls).create(**kwargs)
+
+        keys = self._Crud__field_values.keys()
+        table = pypika.Table(cls._table)
+        query = pypika.PostgreSQLQuery.into(table).columns( *keys ).insert( *[pypika.Parameter("%({})s".format(k)) for k in keys ] ).returning('*')
+
+        data = yield conn_pool.runQuery(query.get_sql(), self._Crud__field_values)
+        data = data[0]
+
+        for field in self._schema.keys():
+            self._Crud__field_values[field] = data.get(field, None)
+            setattr(self, field, data.get(field, None))
+
+
+        return self
 
 #TODO mark object dirty when fields change
 

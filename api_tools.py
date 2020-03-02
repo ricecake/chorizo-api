@@ -24,10 +24,13 @@ class PkiCache(object):
 
         @defer.inlineCallbacks
         def finish(res, *args):
-            self.data = yield treq.json_content(res)
-            self.map.update({ x["kid"]: jwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(x)) for x in self.data["keys"] if x["kid"] })
-            self.last_update = time.time()
-            self.refreshing_deffered = None
+            try:
+                self.data = yield treq.json_content(res)
+                self.map.update({ x["kid"]: jwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(x)) for x in self.data["keys"] if x["kid"] })
+                self.last_update = time.time()
+                self.refreshing_deffered = None
+            except Exception as ex:
+                print(ex)
 
         reqCb = treq.get('https://login.devhost.dev/publickeys')
         reqCb.addCallback(finish, lambda err: print(err))
@@ -73,7 +76,16 @@ class JsonApi(object):
         """
         Serialize data to JSON
         """
-        return json.dumps(data)
+        class ComplexEncoder(json.JSONEncoder):
+            def default(self, obj):
+                import orm
+                print(obj)
+                if isinstance(obj, orm.Crud):
+                    return obj.asDict()
+                # Let the base class default method raise the TypeError
+                return json.JSONEncoder.default(self, obj)
+
+        return json.dumps(data, cls=ComplexEncoder)
 
     def defaultMiddleware(self, f):
         """
