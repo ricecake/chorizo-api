@@ -71,7 +71,16 @@ class Crud(Base):
         return cls
 
     @classmethod
+    # @defer.inlineCallbacks
     def instantiate(cls, **kwargs):
+        self = cls(**kwargs)
+        # defer.returnValue(self)
+        return self
+
+#### Create
+    @classmethod
+    @defer.inlineCallbacks
+    def create(cls, **kwargs):
         # TODO: subclass projection logic goes here
         seen_classes = set()
         newCls = cls
@@ -79,34 +88,34 @@ class Crud(Base):
             seen_classes.add(newCls)
             newCls = newCls.derivedClass(**kwargs)
 
-        return newCls(**kwargs)
+        args = newCls._validator.normalized(kwargs)
+        if not newCls._validator.validate(args):
+            raise Exception(newCls._validator.errors)
 
-#### Create
-    @classmethod
-    def create(cls, **kwargs):
-        args = cls._validator.normalized(kwargs)
-        if not cls._validator.validate(args):
-            raise Exception(cls._validator.errors)
-
-        return cls.instantiate(**args)
+        newObj = yield newCls.instantiate(**args)
+        defer.returnValue(newObj)
 
 #### Retrieve
     @classmethod
+    @defer.inlineCallbacks
     def search(cls,**kwargs):
         raise Exception("Abstract")
 
     @classmethod
+    @defer.inlineCallbacks
     def find(cls, **kwargs):
         raise Exception("Abstract")
 
 
 #### Update
     @classmethod
+    @defer.inlineCallbacks
     def updateClass(cls, **kwargs):
         raise Exception("Abstract")
 
 #### Delete
     @classmethod
+    @defer.inlineCallbacks
     def deleteClass(cls, **kwargs):
         raise Exception("Abstract")
 
@@ -133,6 +142,7 @@ class Crud(Base):
                 self.__field_values[field] = fieldValue
 
 
+    @defer.inlineCallbacks
     def update(self, **kwargs):
         update_fields = {}
         for field in set(self._schema.keys()).intersection(set(kwargs.keys())):
@@ -142,7 +152,7 @@ class Crud(Base):
             self._pre_update(**update_fields)
             self._do_update_action(**update_fields)
             self._post_update(**update_fields)
-        return self
+        defer.returnValue(self)
 
 
     def _pre_update(self, **kwargs):
@@ -166,6 +176,7 @@ class Crud(Base):
 
         return current != self.__field_values
 
+    @defer.inlineCallbacks
     def sync(self):
         for field in self._schema.keys():
             self.__field_values[field] = getattr(self, field, None)
@@ -230,9 +241,8 @@ class Postgres(Crud):
 
     @classmethod
     @defer.inlineCallbacks
-    #TODO This should actually be instantiate
-    def create(cls, **kwargs):
-        self = super(Postgres, cls).create(**kwargs)
+    def instantiate(cls, **kwargs):
+        self = super(Postgres, cls).instantiate(**kwargs)
 
         keys = self._Crud__field_values.keys()
         table = pypika.Table(cls._table)
@@ -246,7 +256,7 @@ class Postgres(Crud):
             setattr(self, field, data.get(field, None))
 
 
-        return self
+        defer.returnValue(self)
 
 #TODO mark object dirty when fields change
 

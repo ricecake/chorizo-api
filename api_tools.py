@@ -79,7 +79,6 @@ class JsonApi(object):
         class ComplexEncoder(json.JSONEncoder):
             def default(self, obj):
                 import orm
-                print(obj)
                 if isinstance(obj, orm.Crud):
                     return obj.asDict()
                 # Let the base class default method raise the TypeError
