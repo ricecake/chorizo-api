@@ -135,7 +135,6 @@ class Crud(Base):
                 self.__field_values[field] = fieldValue
 
 
-    @defer.inlineCallbacks
     def update(self, **kwargs):
         update_fields = {}
         for field in set(self._schema.keys()).intersection(set(kwargs.keys())):
@@ -169,7 +168,6 @@ class Crud(Base):
 
         return current != self.__field_values
 
-    @defer.inlineCallbacks
     def sync(self):
         for field in self._schema.keys():
             self.__field_values[field] = getattr(self, field, None)
@@ -198,35 +196,21 @@ class Cursor(object):
         pass
 
 
-from txpostgres import txpostgres
-import psycopg2, psycopg2.extensions, psycopg2.extras
+import psycopg2, psycopg2.extensions, psycopg2.extras, psycopg2.pool
 import pypika
 
 import config
 
 psycopg2.extensions.register_adapter(dict, psycopg2.extras.Json)
 
-def dict_connect(*args, **kwargs):
-    kwargs['connection_factory'] = psycopg2.extras.RealDictConnection
-    return psycopg2.connect(*args, **kwargs)
-
-
-class DictConnection(txpostgres.Connection):
-    connectionFactory = staticmethod(dict_connect)
-
-class DictConnectionPool(txpostgres.ConnectionPool):
-    connectionFactory = DictConnection
-
-conn_pool = DictConnectionPool(
-    None,
-    min=1,
+conn_pool = psycopg2.pool.ThreadedConnectionPool(1, 20,
     user=config.file["db"]["username"].get(),
     password=config.file["db"]["password"].get(),
     host=config.file["db"]["host"].get(),
     database=config.file["db"]["database"].get(),
+    connection_factory = psycopg2.extras.RealDictConnection,
 )
 
-conn_pool.start()
 
 
 class Postgres(Crud):
@@ -240,15 +224,16 @@ class Postgres(Crud):
         table = pypika.Table(cls._table)
         query = pypika.PostgreSQLQuery.into(table).columns( *keys ).insert( *[pypika.Parameter("%({})s".format(k)) for k in keys ] ).returning('*')
 
-        data = yield conn_pool.runQuery(query.get_sql(), self._Crud__field_values)
-        data = data[0]
+        with conn_pool.getconn() as conn:
+            with conn.cursor() as curr:
+                curr.execute(query.get_sql(), self._Crud__field_values)
+                data = curr.fetchone()
 
-        for field in self._schema.keys():
-            self._Crud__field_values[field] = data.get(field, None)
-            setattr(self, field, data.get(field, None))
+                for field in self._schema.keys():
+                    self._Crud__field_values[field] = data.get(field, None)
+                    setattr(self, field, data.get(field, None))
 
-
-        defer.returnValue(self)
+        return self
 
 #TODO mark object dirty when fields change
 

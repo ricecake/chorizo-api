@@ -1,5 +1,6 @@
 from api_tools import JsonApi
-
+import classes
+import time
 app = JsonApi(__name__)
 
 with app.subroute('/test') as test_api:
@@ -16,10 +17,11 @@ with app.subroute('/test') as test_api:
     def util_ping():
         return "pong"
 
-# @app.route('/test/ping',
-#     restricted=False,
-# )
-# def test_ping(request, **kwargs):
-#     return classes.Identity.create(identity="fooze: {}".format(time.time()))
+    @app.route('/make',
+        methods=['POST'],
+        restricted=False,
+    )
+    def test_ping(**kwargs):
+        return classes.Identity.create(identity="fooze: {}".format(time.time()))
 
 app.run("localhost", 8089)
