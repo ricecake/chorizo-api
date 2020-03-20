@@ -1,5 +1,4 @@
 import cerberus
-from twisted.internet import defer
 
 class Base(object):
     def __init__(self, *args, **kwargs):
@@ -79,7 +78,6 @@ class Crud(Base):
 
 #### Create
     @classmethod
-    @defer.inlineCallbacks
     def create(cls, **kwargs):
         # TODO: subclass projection logic goes here
         seen_classes = set()
@@ -92,30 +90,25 @@ class Crud(Base):
         if not newCls._validator.validate(args):
             raise Exception(newCls._validator.errors)
 
-        newObj = yield newCls.instantiate(**args)
-        defer.returnValue(newObj)
+        return newCls.instantiate(**args)
 
 #### Retrieve
     @classmethod
-    @defer.inlineCallbacks
     def search(cls,**kwargs):
         raise Exception("Abstract")
 
     @classmethod
-    @defer.inlineCallbacks
     def find(cls, **kwargs):
         raise Exception("Abstract")
 
 
 #### Update
     @classmethod
-    @defer.inlineCallbacks
     def updateClass(cls, **kwargs):
         raise Exception("Abstract")
 
 #### Delete
     @classmethod
-    @defer.inlineCallbacks
     def deleteClass(cls, **kwargs):
         raise Exception("Abstract")
 
@@ -240,7 +233,6 @@ class Postgres(Crud):
     _table = None
 
     @classmethod
-    @defer.inlineCallbacks
     def instantiate(cls, **kwargs):
         self = super(Postgres, cls).instantiate(**kwargs)
 

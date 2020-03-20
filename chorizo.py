@@ -1,26 +1,25 @@
 from api_tools import JsonApi
-from twisted.internet import defer
 
-import treq
+app = JsonApi(__name__)
 
-import classes
+with app.subroute('/test') as test_api:
+    @test_api.route('/')
+    def hello():
+        name = request.args.get("name", "World")
+        return f'Hello, {escape(name)}!'
 
-json_api = JsonApi()
-
-
-with json_api.subroute('/util') as util_api:
-    @util_api.route('/ping',
-        restricted=True,
+    @test_api.route('/ping',
+        methods=['GET', 'POST'],
+        restricted=False,
+        validation={ "test": {"type": "string" }}
     )
-    def util_ping(request, **kwargs):
+    def util_ping():
         return "pong"
 
-with json_api.subroute('/test') as test_api:
-    import time
-    @test_api.route('/ping',
-        restricted=False,
-    )
-    def test_ping(request, **kwargs):
-        return classes.Identity.create(identity="fooze: {}".format(time.time()))
+# @app.route('/test/ping',
+#     restricted=False,
+# )
+# def test_ping(request, **kwargs):
+#     return classes.Identity.create(identity="fooze: {}".format(time.time()))
 
-json_api.run("localhost", 8089)
+app.run("localhost", 8089)
