@@ -1,4 +1,6 @@
 from api_tools import JsonApi
+from flask import escape, request
+
 import classes
 import time
 app = JsonApi(__name__)
@@ -24,4 +26,4 @@ with app.subroute('/test') as test_api:
     def test_ping(**kwargs):
         return classes.Identity.create(identity="fooze: {}".format(time.time()))
 
-app.run("localhost", 8089)
+#app.run("localhost", 8089)

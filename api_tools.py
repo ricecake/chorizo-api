@@ -186,8 +186,6 @@ class JsonApi(Flask):
             if not apiKey:
                 raise JsonApiAuthError(cause="No auth")
 
-            keyDef = self.pki_cache.get()
-
             try:
                 kid = jwt.get_unverified_header(apiKey)['kid']
                 pubkey = self.pki_cache.key(kid)
@@ -207,7 +205,14 @@ class JsonApi(Flask):
 
         @wraps(f)
         def deco(*args, **kwargs):
-            content = request.get_json(force=True)
+            content = request.get_json(force=True, silent=True)
+            if not content:
+                raise JsonApiError(
+                    code=400,
+                    message='Input Required',
+                    cause='No Input',
+                )
+
             if not v.validate(content):
                 raise JsonApiError(
                     code=422,
