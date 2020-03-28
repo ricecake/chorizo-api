@@ -15,7 +15,7 @@ class Cache(object):
             print(ex)
 
     def do_refresh(self):
-        pass
+        return
 
     def get(self):
         if not self.data:
@@ -29,7 +29,7 @@ class Cache(object):
 class PkiCache(Cache):
     def __init__(self):
         self.map = {}
-        return super(PkiCache, self).__init__()
+        super(PkiCache, self).__init__()
 
     def do_refresh(self):
         r = requests.get('https://login.devhost.dev/publickeys')
@@ -44,7 +44,7 @@ class PkiCache(Cache):
 
 class RevCache(Cache):
     def __init__(self):
-        return super(RevCache, self).__init__()
+        super(RevCache, self).__init__()
 
     def do_refresh(self):
         r = requests.get('https://login.devhost.dev/revocation')
@@ -74,7 +74,7 @@ class JsonApiAuthError(JsonApiError):
     def __init__(self, **kwargs):
         kwargs['code'] = 401
         kwargs['message'] = 'Sorry, valid credentials required to access content'
-        return super(JsonApiAuthError, self).__init__(**kwargs)
+        super(JsonApiAuthError, self).__init__(**kwargs)
 
 import re
 import json
@@ -89,7 +89,7 @@ class JsonApi(Flask):
         self.pki_cache.refresh()
         self.rev_cache = RevCache()
         self.rev_cache.refresh()
-        return super(JsonApi, self).__init__(*args, **kwargs)
+        super(JsonApi, self).__init__(*args, **kwargs)
 
     @staticmethod
     def join_url_path(*parts):
