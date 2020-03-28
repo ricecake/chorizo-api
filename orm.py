@@ -70,10 +70,8 @@ class Crud(Base):
         return cls
 
     @classmethod
-    # @defer.inlineCallbacks
     def instantiate(cls, **kwargs):
         self = cls(**kwargs)
-        # defer.returnValue(self)
         return self
 
 #### Create
@@ -144,7 +142,7 @@ class Crud(Base):
             self._pre_update(**update_fields)
             self._do_update_action(**update_fields)
             self._post_update(**update_fields)
-        defer.returnValue(self)
+        return self
 
 
     def _pre_update(self, **kwargs):
