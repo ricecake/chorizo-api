@@ -196,8 +196,46 @@ class Cursor(object):
 
 import psycopg2, psycopg2.extensions, psycopg2.extras, psycopg2.pool
 import pypika
+from contextlib import contextmanager
 
 import config
+
+class NestedTransactionConn(psycopg2.extras.RealDictConnection):
+    def __init__(self, *args, **kwargs):
+        self.__txn_depth = 0
+        super(NestedTransactionConn, self).__init__(*args, **kwargs)
+        self.autocommit = True
+
+    def begin(self):
+        if self.__txn_depth > 0:
+
+        self.__txn_depth = self.__txn_depth + 1
+        pass
+
+    def commit(self):
+        pass
+
+    def rollback(self):
+        pass
+
+    @contextmanager
+    def transaction(self):
+        self.begin()
+        try:
+            yield self
+        except Exception:
+            self.rollback()
+        else:
+            self.commit()
+
+class NestedTransactionCursor(psycopg2.extras.RealDictCursor):
+    """
+    This needs a reference to the owning connection.
+    When a transaction method is called, it should update the transcount on the
+    parent.  Need to make sure that the cursors all have the same
+    transaction context, so that if we're nesting transactions, we're using the same cursor/connection/transaction
+    """
+    pass
 
 psycopg2.extensions.register_adapter(dict, psycopg2.extras.Json)
 
@@ -206,7 +244,8 @@ conn_pool = psycopg2.pool.ThreadedConnectionPool(1, 20,
     password=config.file["db"]["password"].get(),
     host=config.file["db"]["host"].get(),
     database=config.file["db"]["database"].get(),
-    connection_factory = psycopg2.extras.RealDictConnection,
+    connection_factory = NestedTransactionConn,
+    cursor_factory = NestedTransactionCursor,
 )
 
 
@@ -223,6 +262,7 @@ class Postgres(Crud):
         query = pypika.PostgreSQLQuery.into(table).columns( *keys ).insert( *[pypika.Parameter("%({})s".format(k)) for k in keys ] ).returning('*')
 
         with conn_pool.getconn() as conn:
+            print(conn.autocommit)
             with conn.cursor() as curr:
                 curr.execute(query.get_sql(), self._Crud__field_values)
                 data = curr.fetchone()
